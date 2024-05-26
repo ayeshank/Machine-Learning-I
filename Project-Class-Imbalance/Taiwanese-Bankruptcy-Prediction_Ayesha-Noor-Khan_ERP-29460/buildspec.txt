@@ -1,0 +1,50 @@
+version: 0.2
+
+phases:
+  pre_build:
+    commands:
+      - echo NextJS App Build Started
+      - sed -i "s/scripts/docker-scripts/g" $CODEBUILD_SRC_DIR/frontend/appspec.yml
+      - ls
+      - cat $CODEBUILD_SRC_DIR/frontend/appspec.yml
+      - cd $CODEBUILD_SRC_DIR/frontend
+      - touch .env
+      - echo VITE_BACKEND_URL=${VITE_BACKEND_URL} >> .env
+
+     # - npm install
+
+  build:
+    commands:
+   #   - npm i next
+    #  - npm run build
+      - echo Logging in to Amazon ECR...
+      - aws --version
+      - aws ecr get-login-password --region ca-central-1 | docker login --username AWS --password-stdin 786014450157.dkr.ecr.ca-central-1.amazonaws.com
+      - REPOSITORY_URI=786014450157.dkr.ecr.ca-central-1.amazonaws.com/frontend
+      - REPOSITORY_NAME=frontend
+      - COMMIT_HASH=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c 1-7)
+      - IMAGE_TAG=${COMMIT_HASH:=latest}
+      - echo Build started on `date`
+      - echo Building the Docker image...
+      - docker build --build-arg repo=$REPOSITORY_NAME -t $REPOSITORY_URI:latest .
+      - docker tag $REPOSITORY_URI:latest $REPOSITORY_URI:$IMAGE_TAG
+      - docker images
+
+  post_build:
+    commands:
+      - echo Build completed on `date`
+      - echo Pushing the Docker images...
+
+    # Ensure proper expansion of REPOSITORY_URI
+      - export REPOSITORY_URI=786014450157.dkr.ecr.ca-central-1.amazonaws.com/frontend
+
+    # Continue with the rest of the commands
+      - docker push $REPOSITORY_URI:latest
+      - docker push $REPOSITORY_URI:$IMAGE_TAG
+      - echo Writing image definitions file...
+      - printf '[{"name":"hello-world","imageUri":"%s"}]' $REPOSITORY_URI:$IMAGE_TAG > imagedefinitions.json
+
+
+artifacts:
+  files:
+    - '**/*'
